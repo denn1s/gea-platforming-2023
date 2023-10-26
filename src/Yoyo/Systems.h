@@ -6,13 +6,24 @@
 #include "ECS/Components.h"
 #include "ECS/Entity.h"
 #include "ECS/System.h"
+
+#include "ContactListener.h"
+
 #include <SDL_keycode.h>
 #include <SDL_render.h>
+#include <SDL_stdinc.h>
 #include <box2d/b2_body.h>
 #include <box2d/b2_fixture.h>
 #include <box2d/b2_math.h>
+#include <box2d/box2d.h>
 #include <box2d/b2_world.h>
+#include <box2d/box2d.h>
 #include <cmath>
+
+struct BodyUserData {
+  BodyUserData(Entity* e) : entity(e) {};
+  Entity* entity;
+};
 
 class CharacterSetupSystem : public SetupSystem {
 public:
@@ -49,6 +60,8 @@ public:
     fixtureDef.friction = 0.0f;
     
     body->CreateFixture(&fixtureDef);
+    BodyUserData* data = new BodyUserData(scene->player);
+    body->GetUserData().pointer = reinterpret_cast<uintptr_t>(data);
 
     scene->player->addComponent<RigidBodyComponent>(
       bodyDef.type,
@@ -61,6 +74,58 @@ public:
     );
   }
 };
+
+class EnemySetupSystem : public SetupSystem {
+public:
+  void run() {
+    Entity* enemy = new Entity(scene->r.create(), scene);
+    
+    auto transform = enemy->addComponent<TransformComponent>(0, 0, 16 * SCALE, 16 * SCALE);
+    enemy->addComponent<SpriteComponent>(
+      "spider.png",
+      16, 16,
+      0, 0,
+      3, 1000
+    );
+
+    auto world = scene->world->get<PhysicsComponent>().b2d;
+
+    float x = 60 * PIXELS_PER_METER; 
+    float y = 45 * PIXELS_PER_METER; 
+    float hx = (16.0f * PIXELS_PER_METER) / 2.0f;
+    float hy = (16.0f * PIXELS_PER_METER) / 2.0f;
+
+    b2BodyDef bodyDef;
+    bodyDef.type = b2_staticBody;
+    bodyDef.position.Set(x + hx, y + hy);
+
+    b2Body* body = world->CreateBody(&bodyDef);
+
+    BodyUserData* data = new BodyUserData(enemy);
+    body->GetUserData().pointer = reinterpret_cast<uintptr_t>(data);
+
+    b2PolygonShape box;
+    box.SetAsBox(hx, hy);
+
+    b2FixtureDef fixtureDef;
+    fixtureDef.shape = &box;
+    fixtureDef.density = 0.0000001f;
+    fixtureDef.friction = 0.0f;
+    
+    body->CreateFixture(&fixtureDef);
+
+    enemy->addComponent<RigidBodyComponent>(
+      bodyDef.type,
+      body,
+      transform.x,
+      transform.y,
+      transform.w,
+      transform.h,
+      SDL_Color{0, 255, 0}
+    );
+  }
+};
+
 
 class BgSetupSystem : public SetupSystem {
 public:
@@ -222,13 +287,10 @@ public:
     if (event.type == SDL_KEYDOWN) {
       // move
       if (event.key.keysym.sym == SDLK_LEFT) {
-        print("Left!");
         moveCharacter(-1);
       } else if (event.key.keysym.sym == SDLK_RIGHT) {
-        print("Right!");
         moveCharacter(1);
       } else if (event.key.keysym.sym == SDLK_SPACE) {
-        print("jump!");
         jumpCharacter();
       }
     } else if (event.type == SDL_KEYUP) {
@@ -275,5 +337,54 @@ private:
   }
 };
 
+class CollisionEventSetupSystem : public SetupSystem {
+public:
+  CollisionEventSetupSystem(Uint32& collisionEvent)
+    : collisionEvent(collisionEvent) { }
+  void run() override {
+    collisionEvent = SDL_RegisterEvents(1);
+    print("collisionEvent in setup", collisionEvent);
 
+    auto world = scene->world->get<PhysicsComponent>().b2d;
+    world->SetContactListener(new ContactListener(collisionEvent));
+  }
 
+private:
+  Uint32& collisionEvent;
+};
+
+class CollisionEventSystem : public EventSystem {
+  public:
+  CollisionEventSystem(Uint32& collisionEvent)
+    : collisionEvent(collisionEvent) { }
+
+   void run(SDL_Event event) override {
+
+      if (event.type == collisionEvent)
+      {
+        print("IT ENTERED!", (int)collisionEvent);
+          Entity* firstEntity = (Entity*)event.user.data1;
+          Entity* secondEntity = (Entity*)event.user.data2;
+          
+          std::string first = firstEntity->get<NameComponent>().tag; 
+          std::string second = secondEntity->get<NameComponent>().tag;
+
+          std::cout << "FIRST ENTITY " << first << std::endl;
+          std::cout << "SECOND ENTITY " << second << std::endl;
+
+          if (first == "PLAYER") {
+            std::cout << "UUUPPP " << std::endl;
+
+            const auto rb = secondEntity->get<RigidBodyComponent>();
+            rb.body->ApplyForce(
+              b2Vec2{-100000.0f * 100, 0},
+              rb.body->GetWorldCenter(),
+              true
+            );
+          }
+      }
+    }
+
+private:
+  Uint32& collisionEvent;
+};
