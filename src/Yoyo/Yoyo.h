@@ -10,5 +10,6 @@ public:
 
 private:
   Scene* createGamePlayScene();
+  Uint32 collisionEvent;
 };
 
