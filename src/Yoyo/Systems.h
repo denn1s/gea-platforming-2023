@@ -30,7 +30,7 @@ public:
     auto world = scene->world->get<PhysicsComponent>().b2d;
 
     float x = 20 * PIXELS_PER_METER; 
-    float y = 0 * PIXELS_PER_METER; 
+    float y = 45 * PIXELS_PER_METER; 
     float hx = (16.0f * PIXELS_PER_METER) / 2.0f;
     float hy = (16.0f * PIXELS_PER_METER) / 2.0f;
 
@@ -45,8 +45,8 @@ public:
 
     b2FixtureDef fixtureDef;
     fixtureDef.shape = &box;
-    fixtureDef.density = 0.0001f;
-    fixtureDef.friction = 0.3f;
+    fixtureDef.density = 0.0000001f;
+    fixtureDef.friction = 0.0f;
     
     body->CreateFixture(&fixtureDef);
 
@@ -121,7 +121,7 @@ public:
     if (scene->world == nullptr) {
       scene->world = new Entity(scene->r.create(), scene);
     }
-    b2Vec2 gravity(0.0f, 9.8f * PIXELS_PER_METER);  // 100 p/m    9.8 m/s * 10 p/m = 98 p/s;
+    b2Vec2 gravity(0.0f, 50.0f * PIXELS_PER_METER);  // 100 p/m    9.8 m/s * 10 p/m = 98 p/s;
     scene->world->addComponent<PhysicsComponent>(new b2World(gravity));
   }
 };
@@ -242,8 +242,8 @@ public:
   }
 
 private:
-  float hForceMagnitude = 1000.0f * PIXELS_PER_METER;
-  float vForceMagnitude = 10000.0f * PIXELS_PER_METER;
+  float hForceMagnitude = 1000.0f * SCALE * PIXELS_PER_METER;
+  float vForceMagnitude = 50000.0f * SCALE * PIXELS_PER_METER;
 
   void moveCharacter(int direction) {
     const auto playerBody = scene->player->get<RigidBodyComponent>().body;
