@@ -1,23 +1,28 @@
 #pragma once
 
+#include "Game/ContactListener.h"
 #include "Yoyo/Components.h"
 #include "constants.h"
 
 #include "ECS/Components.h"
 #include "ECS/Entity.h"
 #include "ECS/System.h"
+#include <SDL_events.h>
 #include <SDL_keycode.h>
 #include <SDL_render.h>
+#include <SDL_stdinc.h>
 #include <box2d/b2_body.h>
 #include <box2d/b2_fixture.h>
 #include <box2d/b2_math.h>
 #include <box2d/b2_world.h>
 #include <cmath>
+#include <cstdint>
 
 class CharacterSetupSystem : public SetupSystem {
 public:
   void run() {
     scene->player = new Entity(scene->r.create(), scene);
+    scene->player->addComponent<NameComponent>("PLAYER");
     
     auto transform = scene->player->addComponent<TransformComponent>(0, 0, 16 * SCALE, 16 * SCALE);
     scene->player->addComponent<SpriteComponent>(
@@ -50,7 +55,61 @@ public:
     
     body->CreateFixture(&fixtureDef);
 
+    body->GetUserData().pointer = reinterpret_cast<uintptr_t>(scene->player);
+
     scene->player->addComponent<RigidBodyComponent>(
+      bodyDef.type,
+      body,
+      transform.x,
+      transform.y,
+      transform.w,
+      transform.h,
+      SDL_Color{0, 255, 0}
+    );
+
+    scene->player->addComponent<LifeComponent>(10);
+  }
+};
+
+class EnemySetupSystem : public SetupSystem {
+public:
+  void run() {
+    Entity* enemy = new Entity(scene->r.create(), scene);
+    enemy->addComponent<NameComponent>("ENEMY");
+    
+    auto transform = enemy->addComponent<TransformComponent>(0, 0, 16 * SCALE, 16 * SCALE);
+    enemy->addComponent<SpriteComponent>(
+      "spider.png",
+      16, 16,
+      0, 0,
+      3, 1000
+    );
+
+    auto world = scene->world->get<PhysicsComponent>().b2d;
+
+    float x = 60 * PIXELS_PER_METER; 
+    float y = 35 * PIXELS_PER_METER; 
+    float hx = (16.0f * PIXELS_PER_METER) / 2.0f;
+    float hy = (16.0f * PIXELS_PER_METER) / 2.0f;
+
+    b2BodyDef bodyDef;
+    bodyDef.type = b2_staticBody;
+    bodyDef.position.Set(x + hx, y + hy);
+
+    b2Body* body = world->CreateBody(&bodyDef);
+
+    b2PolygonShape box;
+    box.SetAsBox(hx, hy);
+
+    b2FixtureDef fixtureDef;
+    fixtureDef.shape = &box;
+    fixtureDef.density = 0.0000001f;
+    fixtureDef.friction = 0.0f;
+    
+    body->CreateFixture(&fixtureDef);
+    body->GetUserData().pointer = reinterpret_cast<uintptr_t>(enemy);
+
+    enemy->addComponent<RigidBodyComponent>(
       bodyDef.type,
       body,
       transform.x,
@@ -61,6 +120,7 @@ public:
     );
   }
 };
+
 
 class BgSetupSystem : public SetupSystem {
 public:
@@ -222,13 +282,10 @@ public:
     if (event.type == SDL_KEYDOWN) {
       // move
       if (event.key.keysym.sym == SDLK_LEFT) {
-        print("Left!");
         moveCharacter(-1);
       } else if (event.key.keysym.sym == SDLK_RIGHT) {
-        print("Right!");
         moveCharacter(1);
       } else if (event.key.keysym.sym == SDLK_SPACE) {
-        print("jump!");
         jumpCharacter();
       }
     } else if (event.type == SDL_KEYUP) {
@@ -275,5 +332,64 @@ private:
   }
 };
 
+class CollisionEventSetupSystem : public SetupSystem {
+public:
+  CollisionEventSetupSystem(Uint32& collisionEvent)
+    : collisionEvent(collisionEvent) { }
 
+  void run() override {
+    collisionEvent = SDL_RegisterEvents(1);  
 
+    auto world = scene->world->get<PhysicsComponent>().b2d;
+    world->SetContactListener(new ContactListener(collisionEvent));
+    
+  }
+private:
+  Uint32& collisionEvent;
+};
+
+class ContactEventSystem :  public EventSystem {
+public:
+  ContactEventSystem(Uint32& collisionEvent)
+    : collisionEvent(collisionEvent) {}
+
+  void run(SDL_Event event) {
+    if (event.type == collisionEvent) {
+      if (event.user.data1 && event.user.data2) {
+        print("Collision! hp reduced by one");
+        auto& life = scene->player->get<LifeComponent>();
+        life.hp -= 1;
+
+        Entity* firstEntity = (Entity*)event.user.data1;
+        Entity* secondEntity = (Entity*)event.user.data2;
+        Entity* enemy = nullptr; 
+
+        if (firstEntity->get<NameComponent>().tag == "ENEMY") {
+          enemy = firstEntity;
+        }
+        if (secondEntity->get<NameComponent>().tag == "ENEMY") {
+          enemy = secondEntity;
+        }
+        if (enemy != nullptr) {
+          print("PUSH PLAYER LEFT!");
+          auto rb = scene->player->get<RigidBodyComponent>().body;
+          rb->ApplyForce(b2Vec2{-100.0f, 0}, rb->GetLocalCenter(), true);
+        }
+        print("Hp Remaining:", life.hp);
+      }
+    }
+  }
+private:
+  Uint32& collisionEvent;
+};
+
+class HpCheckUpdateSystem : public UpdateSystem {
+public:
+  void run(double dT) {
+    auto& life = scene->player->get<LifeComponent>();
+    if (life.hp <= 0) {
+      print("YOU DIED");
+      exit(1);
+    }
+  }
+};

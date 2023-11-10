@@ -19,10 +19,14 @@ Scene* Yoyo::createGamePlayScene() {
   Scene* scene = new Scene("GAMEPLAY SCENE", r);
   addSetupSystem<PhysicsSetupSystem>(scene);
   addSetupSystem<CharacterSetupSystem>(scene);
+  addSetupSystem<EnemySetupSystem>(scene);
   addSetupSystem<BgSetupSystem>(scene);
   addSetupSystem<SpriteSetupSystem>(scene, renderer);
   addUpdateSystem<SpriteUpdateSystem>(scene);
   addRenderSystem<BgColorSystem>(scene);
+  addSetupSystem<CollisionEventSetupSystem>(scene, collisionEvent);
+  addEventSystem<ContactEventSystem>(scene, collisionEvent);
+  addUpdateSystem<HpCheckUpdateSystem>(scene);
 
   addUpdateSystem<PhysicsUpdateSystem>(scene);
   addUpdateSystem<MovementUpdateSystem>(scene);

@@ -9,6 +9,7 @@ public:
   void setup() override;
 
 private:
+  Uint32 collisionEvent;
   Scene* createGamePlayScene();
 };
 

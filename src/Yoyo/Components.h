@@ -22,3 +22,7 @@ struct RigidBodyComponent {
   float friction = 0.3f;
   b2Fixture* fixture = nullptr;
 };
+
+struct LifeComponent {
+  int hp;
+};
